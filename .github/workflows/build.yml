@@ -1,0 +1,116 @@
+name: Build & Deploy ray.so
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Patch next.config.js to enable standalone output for local macOS usage
+      - name: Configure Next.js for standalone build
+        run: |
+          sed -i 's/const nextConfig = {/const nextConfig = {\n  output: "standalone",/' next.config.js
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      # Package standalone server + static assets + public dir into one artifact
+      - name: Prepare standalone artifact
+        run: |
+          mkdir -p standalone-app
+          cp -r .next/standalone/* standalone-app/
+          cp -r .next/static standalone-app/.next/static
+          cp -r public standalone-app/public
+
+          # Create a convenience run script for macOS/Linux
+          cat > standalone-app/run.sh << 'SCRIPT'
+          #!/usr/bin/env bash
+          # Run ray.so locally
+          # Usage: ./run.sh [port]
+          PORT="${1:-3000}"
+          echo "Starting ray.so on http://localhost:$PORT"
+          cd "$(dirname "$0")"
+          PORT="$PORT" node server.js
+          SCRIPT
+          chmod +x standalone-app/run.sh
+
+          # Create a README for the artifact
+          cat > standalone-app/README.txt << 'README'
+          ray.so — Standalone Local Build
+          ================================
+          Run locally on macOS (or Linux):
+
+            ./run.sh           # starts on port 3000
+            ./run.sh 8080      # starts on port 8080
+
+          Then open http://localhost:3000 in your browser.
+
+          Requirements: Node.js 18+ installed.
+          README
+
+      - name: Upload standalone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ray-so-standalone
+          path: standalone-app/
+          retention-days: 30
+
+      # Also attempt a static export for GitHub Pages
+      # This may fail for routes with dynamic server features; if so, Pages won't deploy
+      - name: Try static export for Pages
+        id: static-export
+        continue-on-error: true
+        run: |
+          # Revert to export mode
+          git checkout next.config.js
+          sed -i 's/const nextConfig = {/const nextConfig = {\n  output: "export",\n  images: { unoptimized: true },/' next.config.js
+          # Remove API routes that block static export
+          rm -rf app/api api
+          npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Upload Pages artifact
+        if: steps.static-export.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: out/
+
+  deploy-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    if: success()
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
