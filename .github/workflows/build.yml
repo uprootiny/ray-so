@@ -30,11 +30,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Patch next.config.js to enable standalone output for local macOS usage
-      - name: Configure Next.js for standalone build
-        run: |
-          sed -i 's/const nextConfig = {/const nextConfig = {\n  output: "standalone",/' next.config.js
-
       - name: Build
         run: npm run build
         env:
@@ -43,8 +38,14 @@ jobs:
       # Package standalone server + static assets + public dir into one artifact
       - name: Prepare standalone artifact
         run: |
+          if [ ! -d ".next/standalone" ]; then
+            echo "::error::Missing .next/standalone directory — standalone build failed"
+            ls -la .next/
+            exit 1
+          fi
           mkdir -p standalone-app
           cp -r .next/standalone/* standalone-app/
+          mkdir -p standalone-app/.next
           cp -r .next/static standalone-app/.next/static
           cp -r public standalone-app/public
 
@@ -87,9 +88,8 @@ jobs:
         id: static-export
         continue-on-error: true
         run: |
-          # Revert to export mode
-          git checkout next.config.js
-          sed -i 's/const nextConfig = {/const nextConfig = {\n  output: "export",\n  images: { unoptimized: true },/' next.config.js
+          # Switch from standalone to static export mode
+          sed -i 's/output: "standalone"/output: "export",\n  images: { unoptimized: true }/' next.config.js
           # Remove API routes that block static export
           rm -rf app/api api
           npm run build
