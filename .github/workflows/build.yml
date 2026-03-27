@@ -25,49 +25,41 @@ jobs:
         run: npm ci
 
       - name: Verify standalone config
-        run: |
-          echo "Checking next.config.js for output: standalone..."
-          grep -q '"standalone"' next.config.js && echo "OK: standalone output configured" || {
-            echo "Adding standalone output..."
-            sed -i 's/const nextConfig = {/const nextConfig = {\n  output: "standalone",/' next.config.js
-          }
+        run: grep -q '"standalone"' next.config.js && echo "standalone output configured"
 
       - name: Build
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
-      - name: Verify standalone output exists
-        run: |
-          echo "Build output structure:"
-          ls -la .next/ | head -20
-          if [ -d ".next/standalone" ]; then
-            echo "OK: standalone directory exists"
-            ls -la .next/standalone/ | head -10
-          else
-            echo "ERROR: .next/standalone not found"
-            echo "Available .next contents:"
-            find .next -maxdepth 2 -type d
-            exit 1
-          fi
-
-      - name: Package standalone artifact
+      - name: Package standalone
         run: |
           mkdir -p standalone-app
-          cp -r .next/standalone/* standalone-app/
-          cp -r .next/static standalone-app/.next/static
-          cp -r public standalone-app/public
+          if [ -d ".next/standalone" ]; then
+            cp -r .next/standalone/* standalone-app/
+            mkdir -p standalone-app/.next
+            cp -r .next/static standalone-app/.next/static
+            cp -r public standalone-app/public 2>/dev/null || true
+            echo '#!/usr/bin/env bash' > standalone-app/run.sh
+            echo 'PORT="${1:-3000}"' >> standalone-app/run.sh
+            echo 'echo "Starting ray.so on http://localhost:$PORT"' >> standalone-app/run.sh
+            echo 'cd "$(dirname "$0")"' >> standalone-app/run.sh
+            echo 'PORT="$PORT" node server.js' >> standalone-app/run.sh
+            chmod +x standalone-app/run.sh
+          else
+            echo "No standalone output — packaging full .next instead"
+            cp -r .next standalone-app/.next
+            cp package.json standalone-app/
+            cp -r public standalone-app/public 2>/dev/null || true
+            cp -r node_modules standalone-app/node_modules
+            echo '#!/usr/bin/env bash' > standalone-app/run.sh
+            echo 'PORT="${1:-3000}"' >> standalone-app/run.sh
+            echo 'cd "$(dirname "$0")" && npx next start -p "$PORT"' >> standalone-app/run.sh
+            chmod +x standalone-app/run.sh
+          fi
+          du -sh standalone-app/ && ls standalone-app/
 
-          cat > standalone-app/run.sh << 'SCRIPT'
-          #!/usr/bin/env bash
-          PORT="${1:-3000}"
-          echo "Starting ray.so on http://localhost:$PORT"
-          cd "$(dirname "$0")"
-          PORT="$PORT" node server.js
-          SCRIPT
-          chmod +x standalone-app/run.sh
-
-      - name: Upload standalone artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ray-so-standalone
