@@ -7,12 +7,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 jobs:
   build:
@@ -30,30 +24,42 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify standalone config
+        run: |
+          echo "Checking next.config.js for output: standalone..."
+          grep -q '"standalone"' next.config.js && echo "OK: standalone output configured" || {
+            echo "Adding standalone output..."
+            sed -i 's/const nextConfig = {/const nextConfig = {\n  output: "standalone",/' next.config.js
+          }
+
       - name: Build
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
-      # Package standalone server + static assets + public dir into one artifact
-      - name: Prepare standalone artifact
+      - name: Verify standalone output exists
         run: |
-          if [ ! -d ".next/standalone" ]; then
-            echo "::error::Missing .next/standalone directory — standalone build failed"
-            ls -la .next/
+          echo "Build output structure:"
+          ls -la .next/ | head -20
+          if [ -d ".next/standalone" ]; then
+            echo "OK: standalone directory exists"
+            ls -la .next/standalone/ | head -10
+          else
+            echo "ERROR: .next/standalone not found"
+            echo "Available .next contents:"
+            find .next -maxdepth 2 -type d
             exit 1
           fi
+
+      - name: Package standalone artifact
+        run: |
           mkdir -p standalone-app
           cp -r .next/standalone/* standalone-app/
-          mkdir -p standalone-app/.next
           cp -r .next/static standalone-app/.next/static
           cp -r public standalone-app/public
 
-          # Create a convenience run script for macOS/Linux
           cat > standalone-app/run.sh << 'SCRIPT'
           #!/usr/bin/env bash
-          # Run ray.so locally
-          # Usage: ./run.sh [port]
           PORT="${1:-3000}"
           echo "Starting ray.so on http://localhost:$PORT"
           cd "$(dirname "$0")"
@@ -61,56 +67,9 @@ jobs:
           SCRIPT
           chmod +x standalone-app/run.sh
 
-          # Create a README for the artifact
-          cat > standalone-app/README.txt << 'README'
-          ray.so — Standalone Local Build
-          ================================
-          Run locally on macOS (or Linux):
-
-            ./run.sh           # starts on port 3000
-            ./run.sh 8080      # starts on port 8080
-
-          Then open http://localhost:3000 in your browser.
-
-          Requirements: Node.js 18+ installed.
-          README
-
       - name: Upload standalone artifact
         uses: actions/upload-artifact@v4
         with:
           name: ray-so-standalone
           path: standalone-app/
           retention-days: 30
-
-      # Also attempt a static export for GitHub Pages
-      # This may fail for routes with dynamic server features; if so, Pages won't deploy
-      - name: Try static export for Pages
-        id: static-export
-        continue-on-error: true
-        run: |
-          # Switch from standalone to static export mode
-          sed -i 's/output: "standalone"/output: "export",\n  images: { unoptimized: true }/' next.config.js
-          # Remove API routes that block static export
-          rm -rf app/api api
-          npm run build
-        env:
-          NEXT_TELEMETRY_DISABLED: 1
-
-      - name: Upload Pages artifact
-        if: steps.static-export.outcome == 'success'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: out/
-
-  deploy-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    if: success()
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-        continue-on-error: true
