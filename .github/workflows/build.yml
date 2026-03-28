@@ -24,9 +24,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify standalone config
-        run: grep -q '"standalone"' next.config.js && echo "standalone output configured"
-
       - name: Build
         run: npm run build
         env:
@@ -34,30 +31,34 @@ jobs:
 
       - name: Package standalone
         run: |
-          mkdir -p standalone-app
-          if [ -d ".next/standalone" ]; then
-            cp -r .next/standalone/* standalone-app/
-            mkdir -p standalone-app/.next
-            cp -r .next/static standalone-app/.next/static
-            cp -r public standalone-app/public 2>/dev/null || true
-            echo '#!/usr/bin/env bash' > standalone-app/run.sh
-            echo 'PORT="${1:-3000}"' >> standalone-app/run.sh
-            echo 'echo "Starting ray.so on http://localhost:$PORT"' >> standalone-app/run.sh
-            echo 'cd "$(dirname "$0")"' >> standalone-app/run.sh
-            echo 'PORT="$PORT" node server.js' >> standalone-app/run.sh
-            chmod +x standalone-app/run.sh
-          else
-            echo "No standalone output — packaging full .next instead"
-            cp -r .next standalone-app/.next
-            cp package.json standalone-app/
-            cp -r public standalone-app/public 2>/dev/null || true
-            cp -r node_modules standalone-app/node_modules
-            echo '#!/usr/bin/env bash' > standalone-app/run.sh
-            echo 'PORT="${1:-3000}"' >> standalone-app/run.sh
-            echo 'cd "$(dirname "$0")" && npx next start -p "$PORT"' >> standalone-app/run.sh
-            chmod +x standalone-app/run.sh
-          fi
-          du -sh standalone-app/ && ls standalone-app/
+          # Copy standalone output as base
+          cp -r .next/standalone standalone-app
+
+          # Standalone needs .next/static from the main build
+          mkdir -p standalone-app/.next
+          cp -r .next/static standalone-app/.next/static
+
+          # Copy BUILD_ID and other essential .next files
+          cp .next/BUILD_ID standalone-app/.next/BUILD_ID
+          cp .next/build-manifest.json standalone-app/.next/build-manifest.json 2>/dev/null || true
+          cp .next/prerender-manifest.json standalone-app/.next/prerender-manifest.json 2>/dev/null || true
+          cp .next/routes-manifest.json standalone-app/.next/routes-manifest.json 2>/dev/null || true
+
+          # Copy public assets
+          cp -r public standalone-app/public 2>/dev/null || true
+
+          # Run script
+          cat > standalone-app/run.sh << 'SCRIPT'
+          #!/usr/bin/env bash
+          PORT="${1:-3000}"
+          echo "Starting ray.so on http://localhost:$PORT"
+          cd "$(dirname "$0")"
+          PORT="$PORT" HOSTNAME="0.0.0.0" node server.js
+          SCRIPT
+          chmod +x standalone-app/run.sh
+
+          echo "Package size:" && du -sh standalone-app/
+          echo "Key files:" && ls standalone-app/.next/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
