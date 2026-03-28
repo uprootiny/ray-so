@@ -1,83 +1,88 @@
-<!-- TEXT_SECTION:header:START -->
 <p align="center">
   <a href="https://ray.so" target="_blank" rel="noopener noreferrer">
     <img width="1024" src="app/assets/og-image.png" alt="ray.so">
   </a>
 </p>
-<h1 align="center">
-  ray.so
-</h1>
-<h3 align="center">
-  Built by <a href="https://raycast.com/#ref=ray.so" target="_blank" rel="noopener noreferrer">Raycast</a>
-</h3>
+
+<h1 align="center">ray.so -- standalone local build</h1>
+
 <p align="center">
-  Create code snippets, browse AI prompts, create extension icons and more.
+  A fork of <a href="https://github.com/raycast/ray-so">Raycast's ray.so</a> that builds the app as a <strong>standalone local application</strong>, not just a hosted website.
 </p>
 
 <p align="center">
-  <a aria-label="Follow Raycast on X" href="https://x.com/raycast">
-    <img alt="" src="https://img.shields.io/badge/Follow%20@raycastapp-black.svg?style=for-the-badge&logo=X">
-  </a>
-  <a aria-label="Join the community on Slack" href="https://raycast.com/community">
-    <img alt="" src="https://img.shields.io/badge/Join%20the%20community-black.svg?style=for-the-badge&logo=Slack">
+  <a href="https://github.com/uprootiny/ray-so/actions/workflows/build.yml">
+    <img src="https://github.com/uprootiny/ray-so/actions/workflows/build.yml/badge.svg" alt="Build & Deploy">
   </a>
 </p>
-
-<!-- TEXT_SECTION:header:END -->
 
 ## About
 
-This repository contains the source code for [ray.so](https://ray.so), a collection of tools built by [Raycast](https://raycast.com/#ref=ray.so). It includes:
+[ray.so](https://ray.so) by [Raycast](https://raycast.com) is a suite of developer tools for creating beautiful code snippet images, browsing AI prompts, creating Raycast extension icons, and more.
 
-- [**Code Images**](</app/(navigation)/(code)>): Create beautiful images of your code.
-- [**Icon Maker**](</app/(navigation)/icon/>): Create beautiful icons for Raycast Extensions.
-- [**Prompt Explorer**](</app/(navigation)/prompts/>): Explore AI Prompts for Raycast.
-- [**Preset Explorer**](</app/(navigation)/presets/>): Explore AI Presets for Raycast.
-- [**Quicklink Explorer**](</app/(navigation)/quicklinks/>): Browse and import Raycast Quicklinks.
-- [**Snippet Explorer**](</app/(navigation)/snippets/>): Browse and import Raycast Snippets.
-- [**Theme Explorer**](</app/(navigation)/themes/>): Browse and import Raycast Themes.
+This fork packages ray.so as a **standalone local app** you can download and run on your own machine. CI produces a downloadable artifact containing a Node.js server and all static assets -- no internet connection required after download.
 
-## Setup
+The build pipeline also attempts a static export for GitHub Pages deployment.
 
-This is a [Next.js](https://nextjs.org/) project. If you're unfamiliar with it, check out the [Next.js Documentation](https://nextjs.org/docs).
+## Quick start
 
-To get started, download the repo, install dependencies and run the development server:
+1. Go to the [Actions tab](https://github.com/uprootiny/ray-so/actions/workflows/build.yml) and open the latest successful run.
+2. Download the **ray-so-standalone** artifact (a zip containing a Node.js server + static assets).
+3. Unzip and run:
 
 ```bash
-npm install
+unzip ray-so-standalone.zip -d ray-so
+cd ray-so
+./run.sh            # starts on http://localhost:3000
+./run.sh 8080       # ...or pick a different port
+```
+
+**Requires Node.js 18+.**
+
+## Build from source
+
+```bash
+npm ci
+npm run build
+```
+
+The standalone server output lands in `.next/standalone/`. For development with hot-reload:
+
+```bash
+npm ci
 npm run dev
 ```
 
-## Contributing
+Then open <http://localhost:3000>.
 
-We welcome contributions primarily in the form of new presets, prompts, snippets, themes, and bug fixes.
+## CI / artifacts
 
-> [!NOTE]
-> If you're interested in creating a new code theme we recommend forking the project to run your own version. However, certain partner themes may be considered. Please reach out by creating an issue or [contacting us](mailto:feedback+rayso@raycast.com) first.
+The GitHub Actions workflow (`.github/workflows/build.yml`) runs on every push to `main`:
 
-If you're interested in contributing, follow the steps below:
+1. `npm ci && npm run build` -- produces a **standalone** Next.js server.
+2. Packages the server, static assets, `public/` directory, and a `run.sh` helper into the **ray-so-standalone** artifact (retained for 30 days).
+3. Attempts a **static export** (`output: "export"`) and deploys to GitHub Pages if it succeeds.
 
-### Presets, Prompts, Quicklinks & Snippets
+The static export may fail for routes that use dynamic server features in upstream. When that happens the standalone artifact is still produced and usable -- only the Pages deployment is skipped.
 
-- Open [prompts.ts](</app/(navigation)/prompts/prompts.ts>) or [presets.ts](</app/(navigation)/presets/presets.ts>) or [snippets.ts](</app/(navigation)/snippets/snippets.ts>) or [quicklinks.ts](</app/(navigation)/quicklinks/quicklinks.ts>)
-- Add your data to the relevant category
-  - Ensure it includes all fields, and that they're unique within their category
-- Add your name and (optional) website url to the `author` field
-- Create a pull request
+## GitHub Pages
 
-### Themes
+If the static export step succeeds, the site is deployed automatically:
 
-#### 1. Copy the Theme JSON from Raycast
+> <https://uprootiny.github.io/ray-so/>
 
-- Open Theme Studio in Raycast
-- Right click on your Theme and select "Copy as JSON"
+## Upstream
 
-#### 2. Add the theme to repo
+Based on [raycast/ray-so](https://github.com/raycast/ray-so). Upstream features include:
 
-- In [themes](</app/(navigation)/themes/themes>), create a folder with your Raycast username, ie: `peduarte`
-- In that folder, create a file with the theme name, ie: `red.json`
-- In that file, paste the theme JSON you copied from Raycast's Theme Studio
+- **Code Images** -- create beautiful images of your code
+- **Icon Maker** -- create icons for Raycast extensions
+- **Prompt Explorer** -- browse AI prompts
+- **Preset Explorer** -- browse AI presets
+- **Quicklink Explorer** -- browse and import quicklinks
+- **Snippet Explorer** -- browse and import snippets
+- **Theme Explorer** -- browse and import themes
 
-#### 3. Commit and push your changes
+## License
 
-- Create a Pull Request 🚀
+See upstream [raycast/ray-so](https://github.com/raycast/ray-so) for license terms.
